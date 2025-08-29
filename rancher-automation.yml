@@ -3,47 +3,39 @@
   hosts: localhost
   connection: local
   gather_facts: no
-
   vars:
-    # Rancher details
-    rancher_url: "https://192.168.170.45"
-    rancher_token: "token-992sp:phgs5wlpqpf4brjtjdxkqvlsd5tlmn2kgnd2wlj68tmwfdw975n7z8"  # your Rancher API token
-    cluster_name: "openstack-cluster-2"   # replace with your actual cluster name
-
-    # OpenStack details
-    vm_name: "rancher-node-1"
-    vm_image: "7e19db1a-48d4-4418-b5e2-d2a5dc611a69"
-    vm_flavor: "6a7bab60-adc2-4cff-8db7-6a4f1f866ac2"
-    vm_keypair: "rke"
-    vm_net: "bce77acb-b609-4205-a00a-6964072d4068"
-
+    rancher_url: https://192.168.170.45
+    rancher_token: token-992sp:phgs5wlpqpf4brjtjdxkqvlsd5tlmn2kgnd2wlj68tmwfdw975n7z8
+    cluster_name: openstack-cluster-2
+    vm_name: rancher-node-1
+    vm_image: 7e19db1a-48d4-4418-b5e2-d2a5dc611a69
+    vm_flavor: 6a7bab60-adc2-4cff-8db7-6a4f1f866ac2
+    vm_keypair: rke
+    vm_net: bce77acb-b609-4205-a00a-6964072d4068
   tasks:
     - name: Get cluster ID from Rancher
       uri:
         url: "{{ rancher_url }}/v3/clusters?name={{ cluster_name }}"
         method: GET
         headers:
-          Authorization: "Bearer {{ rancher_token }}"
+          Authorization: Bearer {{ rancher_token }}
         validate_certs: no
       register: cluster_info
-
     - name: Extract cluster ID
       set_fact:
         cluster_id: "{{ cluster_info.json.data[0].id }}"
-
     - name: Get registration command from Rancher
       uri:
         url: "{{ rancher_url }}/v3/clusterregistrationtokens?clusterId={{ cluster_id }}"
         method: GET
         headers:
-          Authorization: "Bearer {{ rancher_token }}"
+          Authorization: Bearer {{ rancher_token }}
         validate_certs: no
       register: reg_info
-
     - name: Extract registration command and add roles
       set_fact:
-        reg_command: "{{ reg_info.json.data[0].nodeCommand | regex_replace('curl -fL', 'curl --insecure -fL') }} --etcd --controlplane --worker"
-
+        reg_command: "{{ reg_info.json.data[0].nodeCommand | regex_replace('curl -fL',
+          'curl --insecure -fL') }} --etcd --controlplane --worker"
     - name: Create cloud-init user_data file
       copy:
         dest: ./cloud-init.yml
@@ -58,7 +50,6 @@
             - usermod -aG docker ubuntu
             - echo "Running Rancher registration..."
             - {{ reg_command }}
-
     - name: Create VM on OpenStack with cloud-init
       os_server:
         state: present
@@ -71,6 +62,6 @@
         userdata: "{{ lookup('file', './cloud-init.yml') }}"
         auto_ip: yes
       register: new_vm
-
     - debug:
-        msg: "VM {{ vm_name }} created with IP {{ new_vm.server.public_v4 | default(new_vm.server.private_v4) | default('No IP assigned') }}"
+        msg: VM {{ vm_name }} created with IP {{ new_vm.server.public_v4 |
+          default(new_vm.server.private_v4) | default('No IP assigned') }}
