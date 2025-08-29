@@ -1,0 +1,58 @@
+- name: Get Rancher cluster registration command
+  hosts: localhost
+  vars:
+    rancher_url: "https://192.168.170.45"
+    api_token: "token-992sp:phgs5wlpqpf4brjtjdxkqvlsd5tlmn2kgnd2wlj68tmwfdw975n7z8"
+    cluster_name: "openstack-cluster-2"
+
+  tasks:
+    - name: Fetch cluster details
+      uri:
+        url: "{{ rancher_url }}/v3/clusters?name={{ cluster_name }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ api_token }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: cluster_list_response
+
+    - name: Fail if cluster not found
+      fail:
+        msg: "Cluster named {{ cluster_name }} not found!"
+      when: cluster_list_response.json.data | length == 0
+
+    - name: Set cluster ID
+      set_fact:
+        cluster_id: "{{ cluster_list_response.json.data[0].id }}"
+
+    - name: Create cluster registration token
+      uri:
+        url: "{{ rancher_url }}/v3/clusterregistrationtokens"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ api_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          clusterId: "{{ cluster_id }}"
+        validate_certs: false
+        status_code: [200, 201]
+      register: registration_response
+
+    - name: Fetch registration tokens for this cluster
+      uri:
+        url: "{{ rancher_url }}/v3/clusterregistrationtokens?clusterId={{ cluster_id }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ api_token }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: tokens_response
+
+    - name: Build registration command with --insecure and roles
+      set_fact:
+        registration_cmd: "{{ tokens_response.json.data[0].nodeCommand | regex_replace('curl -fL', 'curl --insecure -fL') }} --etcd --controlplane --worker"
+
+    - name: Print exact registration command
+      debug:
+        msg: "{{ registration_cmd }}"
